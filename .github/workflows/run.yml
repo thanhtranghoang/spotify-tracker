@@ -2,8 +2,11 @@ name: Spotify Tracker
 
 on:
   schedule:
-    - cron: '0 */3 * * *'   # Runs at 0:00, 3:00, 6:00, 9:00, 12:00, 15:00, 18:00, 21:00 UTC
-  workflow_dispatch:          # Also allows manual trigger from GitHub UI
+    - cron: '0 */3 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write        # ← This is the only line that was missing
 
 jobs:
   track:
@@ -12,6 +15,8 @@ jobs:
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}   # ← Explicitly pass the token
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -31,10 +36,10 @@ jobs:
           DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
         run: python tracker.py
 
-      - name: Save updated play count back to repo
+      - name: Save updated data back to repo
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add spotify_data.json
-          git diff --staged --quiet || git commit -m "Update play count $(date -u)"
+          git diff --staged --quiet || git commit -m "Update play counts $(date -u)"
           git push
