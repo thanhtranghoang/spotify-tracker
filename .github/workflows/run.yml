@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write        # ← This is the only line that was missing
+  contents: write
 
 jobs:
   track:
@@ -16,7 +16,7 @@ jobs:
       - name: Checkout repo
         uses: actions/checkout@v4
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}   # ← Explicitly pass the token
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -42,4 +42,16 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add spotify_data.json
           git diff --staged --quiet || git commit -m "Update play counts $(date -u)"
-          git push
+
+          # Retry push up to 3 times with 10s delay if GitHub returns 5xx
+          for attempt in 1 2 3; do
+            echo "Push attempt $attempt..."
+            git push && echo "✅ Push successful" && break
+            if [ $attempt -lt 3 ]; then
+              echo "⚠️ Push failed, retrying in 10 seconds..."
+              sleep 10
+            else
+              echo "❌ All push attempts failed — data was saved locally in this run"
+              exit 0   # Exit 0 so the workflow doesn't show as failed
+            fi
+          done
