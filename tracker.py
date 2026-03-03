@@ -9,7 +9,6 @@ import requests
 ARTIST_URL = "https://open.spotify.com/artist/4SiNg3BrvdFycwTlO6HGKN"
 DISCORD_WEBHOOK = os.environ["DISCORD_WEBHOOK"]
 DATA_FILE = "spotify_data.json"
-CHECK_INTERVAL_HOURS = 3  # Must match your cron schedule
 
 
 def make_driver():
@@ -75,7 +74,7 @@ def get_top_tracks():
                 name, play_count = None, None
                 for line in lines:
                     clean = line.replace(",", "").replace(".", "").replace(" ", "")
-                    if not clean.isdigit() and len(line) > 1 and not ":" in line:
+                    if not clean.isdigit() and len(line) > 1 and ":" not in line:
                         name = line
                         break
                 for line in lines:
@@ -105,110 +104,146 @@ def save_data(data):
         json.dump(data, f, indent=2)
 
 
+def today_utc():
+    return datetime.utcnow().strftime("%Y-%m-%d")
+
+
+def get_daily_increase(track_name, current_count, prev_tracks):
+    """
+    Returns how many plays this track gained since UTC midnight today.
+    Resets automatically every new day.
+    """
+    prev = prev_tracks.get(track_name, {})
+    day_start_count = prev.get("day_start_count")
+    day_start_date = prev.get("day_start_date")
+
+    # New day — the daily baseline hasn't been set for today yet
+    if day_start_date != today_utc() or day_start_count is None:
+        return None  # Will be initialized in save step
+
+    return current_count - day_start_count
+
+
+def calc_rate(track_name, current_count, prev_tracks):
+    """Returns plays/hour based on actual elapsed time since last change."""
+    prev = prev_tracks.get(track_name)
+    if not prev:
+        return None
+    prev_count = prev.get("count", 0)
+    prev_changed_at = prev.get("last_changed_at")
+    if not prev_changed_at or prev_count == current_count:
+        return None
+    diff = current_count - prev_count
+    if diff <= 0:
+        return None
+    hours_elapsed = (datetime.utcnow() - datetime.fromisoformat(prev_changed_at)).total_seconds() / 3600
+    if hours_elapsed < 0.1:
+        return None
+    return diff / hours_elapsed
+
+
 def predict_catchup(rank1, rank2, prev_tracks):
-    """
-    Estimate when rank2 can reach rank1's play count.
-    Uses per-check growth rates stored from previous runs.
-    Returns a human-readable string.
-    """
     name1, count1 = rank1["name"], rank1["count"]
     name2, count2 = rank2["name"], rank2["count"]
-
-    prev1 = prev_tracks.get(name1, {})
-    prev2 = prev_tracks.get(name2, {})
-
-    # Need at least one previous data point to calculate growth
-    if not prev1 or not prev2:
-        return "⏳ **Collecting data...** Need at least 2 checks to predict. Check back in 3 hours."
-
-    # Growth per check interval (every 3 hours)
-    growth1 = count1 - prev1.get("count", count1)
-    growth2 = count2 - prev2.get("count", count2)
-
+    rate1 = calc_rate(name1, count1, prev_tracks)
+    rate2 = calc_rate(name2, count2, prev_tracks)
     gap = count1 - count2
 
-    # Format line for Discord
-    growth_line = (
-        f"  • `#{1}` grows **+{growth1:,}** / 3h\n"
-        f"  • `#{2}` grows **+{growth2:,}** / 3h"
-    )
+    def rate_str(rate, rank):
+        if rate is None:
+            return f"  • `#{rank}` rate: **no change detected yet**"
+        return f"  • `#{rank}` grows **+{rate:,.1f}** plays/hr"
+
+    rate_lines = f"{rate_str(rate1, 1)}\n{rate_str(rate2, 2)}"
 
     if gap <= 0:
-        return f"🏆 **#{2} has already passed #{1}!**\n{growth_line}"
-
-    net_gain_per_check = growth2 - growth1
-
-    if net_gain_per_check <= 0:
+        return f"🏆 **#2 has already passed #1!**\n{rate_lines}"
+    if rate1 is None or rate2 is None:
         return (
-            f"📉 **#{2} is not catching up** at current rates.\n"
-            f"{growth_line}\n"
-            f"  • Gap: **{gap:,}** plays — widening by **{abs(net_gain_per_check):,}** every 3h"
+            f"⏳ **Waiting for Spotify to update counts...**\n"
+            f"  • Gap: **{gap:,}** plays\n"
+            f"{rate_lines}"
         )
-
-    checks_needed = gap / net_gain_per_check
-    hours_needed = checks_needed * CHECK_INTERVAL_HOURS
+    net_gain_per_hour = rate2 - rate1
+    if net_gain_per_hour <= 0:
+        return (
+            f"📉 **#2 is not catching up at current rates**\n"
+            f"  • Gap: **{gap:,}** plays — widening **{abs(net_gain_per_hour):,.1f}** plays/hr\n"
+            f"{rate_lines}"
+        )
+    hours_needed = gap / net_gain_per_hour
     catch_date = datetime.utcnow() + timedelta(hours=hours_needed)
-
     days = int(hours_needed // 24)
     hours = int(hours_needed % 24)
-    time_str = f"{days}d {hours}h" if days > 0 else f"{hours}h"
-
+    time_str = f"{days}d {hours}h" if days > 0 else f"{int(hours_needed)}h {int((hours_needed % 1)*60)}m"
     return (
-        f"🔮 **#{2} could reach #{1} in ~{time_str}**\n"
+        f"🔮 **#2 could catch #1 in ~{time_str}**\n"
         f"  • Est. date: **{catch_date.strftime('%b %d, %Y at %H:%M UTC')}**\n"
-        f"{growth_line}\n"
-        f"  • Gap now: **{gap:,}** plays\n"
-        f"  • Closing at: **+{net_gain_per_check:,}** plays / 3h"
+        f"{rate_lines}\n"
+        f"  • Gap: **{gap:,}** plays\n"
+        f"  • Closing at: **+{net_gain_per_hour:,.1f}** plays/hr"
     )
+
+
+def has_any_change(tracks, prev_tracks):
+    for t in tracks:
+        if prev_tracks.get(t["name"], {}).get("count", 0) != t["count"]:
+            return True
+    return False
 
 
 def send_to_discord(tracks, prev_data):
-    now = datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC")
+    now_str = datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC")
     prev_tracks = prev_data.get("tracks", {})
     prev_run = prev_data.get("last_run", "Never")
 
     fields = []
-
     for i, track in enumerate(tracks, 1):
         name = track["name"]
         count = track["count"]
         prev_count = prev_tracks.get(name, {}).get("count", 0)
-        diff = count - prev_count if prev_count else 0
+        diff = count - prev_count
         arrow = "📈" if diff > 0 else "➡️"
 
-        # Gap to track above
+        # Gap to rank above
         gap_str = ""
         if i > 1:
-            gap = tracks[i - 2]["count"] - count   # gap to the rank above
+            gap = tracks[i - 2]["count"] - count
             gap_str = f"\n   ↕️ Gap to #{i-1}: **{abs(gap):,}** plays"
+
+        # Plays/hour rate
+        rate = calc_rate(name, count, prev_tracks)
+        rate_str = f"\n   ⚡ Rate: **{rate:,.1f}** plays/hr" if rate else ""
+
+        # Daily total — plays gained since UTC midnight
+        daily = get_daily_increase(name, count, prev_tracks)
+        if daily is None:
+            daily_str = f"\n   📅 Today: **calculating...** (resets at UTC midnight)"
+        elif daily == 0:
+            daily_str = f"\n   📅 Today: **no plays yet today**"
+        else:
+            daily_str = f"\n   📅 Today: **+{daily:,}** plays so far ({today_utc()} UTC)"
 
         fields.append({
             "name": f"#{i} — {name}",
             "value": (
-                f"🔢 **{count:,}** plays\n"
-                f"{arrow} **+{diff:,}** since last check"
+                f"🔢 **{count:,}** total plays\n"
+                f"{arrow} **+{diff:,}** since last update"
+                f"{daily_str}"
                 f"{gap_str}"
+                f"{rate_str}"
             ),
             "inline": False
         })
 
-    # Divider
-    fields.append({
-        "name": "─────────────────────",
-        "value": "** **",
-        "inline": False
-    })
-
-    # Prediction: when can #2 reach #1?
-    prediction = predict_catchup(tracks[0], tracks[1], prev_tracks)
+    fields.append({"name": "─────────────────────", "value": "** **", "inline": False})
     fields.append({
         "name": "📊 Can #2 Catch #1?",
-        "value": prediction,
+        "value": predict_catchup(tracks[0], tracks[1], prev_tracks),
         "inline": False
     })
-
-    fields.append({"name": "🕐 Checked At", "value": now, "inline": True})
-    fields.append({"name": "📊 Previous Check", "value": prev_run, "inline": True})
+    fields.append({"name": "🕐 Updated At", "value": now_str, "inline": True})
+    fields.append({"name": "📋 Prev Check", "value": prev_run, "inline": True})
 
     payload = {
         "embeds": [{
@@ -216,10 +251,9 @@ def send_to_discord(tracks, prev_data):
             "url": ARTIST_URL,
             "color": 1947988,
             "fields": fields,
-            "footer": {"text": "Updates every 3 hours via GitHub Actions"}
+            "footer": {"text": "Only updates when counts change • Daily totals reset at UTC midnight"}
         }]
     }
-
     r = requests.post(DISCORD_WEBHOOK, json=payload)
     print(f"Discord status: {r.status_code}")
 
@@ -236,22 +270,67 @@ def send_error_to_discord(message):
     requests.post(DISCORD_WEBHOOK, json=payload)
 
 
+def build_updated_tracks(tracks, prev_tracks, now_iso):
+    """Build the new tracks dict to save, handling daily reset logic."""
+    updated = {}
+    for t in tracks:
+        name = t["name"]
+        count = t["count"]
+        prev = prev_tracks.get(name, {})
+        prev_count = prev.get("count", 0)
+
+        # Preserve or update last_changed_at
+        if count != prev_count:
+            last_changed_at = now_iso
+        else:
+            last_changed_at = prev.get("last_changed_at", now_iso)
+
+        # Daily snapshot — reset at UTC midnight
+        if prev.get("day_start_date") != today_utc():
+            # New day: set today's baseline as the current count
+            # (or carry over the previous end-of-day count as the start)
+            day_start_count = prev_count if prev_count else count
+            day_start_date = today_utc()
+        else:
+            # Same day — keep the existing baseline
+            day_start_count = prev.get("day_start_count", count)
+            day_start_date = prev.get("day_start_date")
+
+        updated[name] = {
+            "count": count,
+            "last_changed_at": last_changed_at,
+            "day_start_count": day_start_count,
+            "day_start_date": day_start_date
+        }
+    return updated
+
+
 # ─── MAIN ────────────────────────────────────────────────────
 if __name__ == "__main__":
-    print(f"[{datetime.utcnow()}] Starting top 5 tracker...")
+    now_iso = datetime.utcnow().isoformat()
+    print(f"[{now_iso}] Starting tracker...")
 
     data = load_data()
+    prev_tracks = data.get("tracks", {})
     tracks = get_top_tracks()
 
-    if tracks:
-        print(f"\nSuccessfully found {len(tracks)} tracks.")
-        send_to_discord(tracks, data)
-        data["last_run"] = datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC")
-        data["tracks"] = {t["name"]: {"count": t["count"]} for t in tracks}
-        save_data(data)
-        print("Data saved. ✅")
-    else:
+    if not tracks:
         msg = "Could not extract tracks. Check GitHub Actions logs."
         print(f"❌ {msg}")
         send_error_to_discord(msg)
         exit(1)
+
+    if not has_any_change(tracks, prev_tracks):
+        print("⏭️  No change detected — skipping Discord message.")
+        data["last_run"] = datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC")
+        data["tracks"] = build_updated_tracks(tracks, prev_tracks, now_iso)
+        save_data(data)
+        exit(0)
+
+    print("✅ Changes detected — sending to Discord...")
+    send_to_discord(tracks, data)
+
+    data["last_run"] = datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC")
+    data["tracks"] = build_updated_tracks(tracks, prev_tracks, now_iso)
+    save_data(data)
+    print("Data saved. ✅")
