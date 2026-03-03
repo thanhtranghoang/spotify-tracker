@@ -3,8 +3,6 @@ from datetime import datetime
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.common.by import By
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
 from webdriver_manager.chrome import ChromeDriverManager
 import requests
 
@@ -13,80 +11,110 @@ DISCORD_WEBHOOK = os.environ["DISCORD_WEBHOOK"]
 DATA_FILE = "spotify_data.json"
 
 
-def get_top_tracks():
+def make_driver():
     options = webdriver.ChromeOptions()
-    options.add_argument("--headless")
+    options.add_argument("--headless=new")          # New headless mode, less detectable
     options.add_argument("--no-sandbox")
     options.add_argument("--disable-dev-shm-usage")
+    options.add_argument("--disable-gpu")
+    options.add_argument("--window-size=1920,1080")
     options.add_argument("--disable-blink-features=AutomationControlled")
+    options.add_experimental_option("excludeSwitches", ["enable-automation"])
+    options.add_experimental_option("useAutomationExtension", False)
     options.add_argument(
-        "user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-        "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+        "user-agent=Mozilla/5.0 (X11; Linux x86_64) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) "
+        "Chrome/121.0.0.0 Safari/537.36"
     )
-
     driver = webdriver.Chrome(
         service=Service(ChromeDriverManager().install()), options=options
     )
+    # Patch navigator.webdriver to False to avoid bot detection
+    driver.execute_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
+    return driver
 
+
+def parse_play_count(text):
+    """Convert a string like '1,234,567' or '1.234.567' to int."""
+    clean = text.strip().replace(",", "").replace(".", "").replace("\u202f", "").replace("\xa0", "").replace(" ", "")
+    if clean.isdigit():
+        val = int(clean)
+        if 10_000 < val < 10_000_000_000:
+            return val
+    return None
+
+
+def get_top_tracks():
+    driver = make_driver()
     tracks = []
+
     try:
         driver.get(ARTIST_URL)
-        # Wait until track rows are visible on the page
-        WebDriverWait(driver, 15).until(
-            EC.presence_of_all_elements_located(
-                (By.CSS_SELECTOR, '[data-testid="track-row"]')
-            )
-        )
-        time.sleep(3)  # Extra buffer for play counts to load
+        print("Page loading... waiting 12 seconds for JS to render")
+        time.sleep(12)  # Give Spotify's React app time to fully render
 
-        rows = driver.find_elements(By.CSS_SELECTOR, '[data-testid="track-row"]')
+        page_source_len = len(driver.page_source)
+        print(f"Page source length: {page_source_len} chars")
 
-        for row in rows[:5]:  # Top 5 only
+        # ── Selector Attempt 1: data-testid="tracklist-row" ──────────────
+        rows = driver.find_elements(By.CSS_SELECTOR, '[data-testid="tracklist-row"]')
+        print(f"Attempt 1 (tracklist-row): found {len(rows)} rows")
+
+        # ── Selector Attempt 2: data-testid="track-row" ──────────────────
+        if not rows:
+            rows = driver.find_elements(By.CSS_SELECTOR, '[data-testid="track-row"]')
+            print(f"Attempt 2 (track-row): found {len(rows)} rows")
+
+        # ── Selector Attempt 3: aria-rowindex on divs ─────────────────────
+        if not rows:
+            rows = driver.find_elements(By.XPATH, '//div[@aria-rowindex]')
+            print(f"Attempt 3 (aria-rowindex): found {len(rows)} rows")
+
+        # ── Selector Attempt 4: role="row" ───────────────────────────────
+        if not rows:
+            rows = driver.find_elements(By.XPATH, '//*[@role="row"]')
+            print(f"Attempt 4 (role=row): found {len(rows)} rows")
+
+        if not rows:
+            # Print a snippet of the page source for debugging
+            print("DEBUG: First 3000 chars of page source:")
+            print(driver.page_source[:3000])
+            return []
+
+        for row in rows[:5]:
             try:
-                # Track name
-                name_el = row.find_element(
-                    By.CSS_SELECTOR, '[data-testid="internal-track-link"] div'
-                )
-                name = name_el.text.strip()
+                lines = [l.strip() for l in row.text.split("\n") if l.strip()]
+                print(f"  Row text lines: {lines}")
 
-                # Play count — shown as a formatted number in the row
-                # It's typically the last meaningful text column
-                cols = row.find_elements(By.XPATH, ".//*[not(*)]")
+                name = None
                 play_count = None
-                for col in cols:
-                    text = col.text.strip().replace(",", "").replace(".", "").replace("\u202f", "")
-                    if text.isdigit() and len(text) >= 5:
-                        candidate = int(text)
-                        if 10_000 < candidate < 10_000_000_000:
-                            play_count = candidate
-                            break
+
+                # First non-numeric, non-empty line is usually the track name
+                for line in lines:
+                    clean = line.replace(",", "").replace(".", "").replace(" ", "")
+                    if not clean.isdigit() and len(line) > 1:
+                        name = line
+                        break
+
+                # Find the play count from all lines
+                for line in lines:
+                    val = parse_play_count(line)
+                    if val:
+                        play_count = val
+                        break
 
                 if name and play_count:
                     tracks.append({"name": name, "count": play_count})
+                    print(f"  ✅ {name}: {play_count:,}")
+                else:
+                    print(f"  ⚠️ Could not parse — name={name}, count={play_count}")
 
             except Exception as e:
-                print(f"Row parse error: {e}")
+                print(f"  Row error: {e}")
                 continue
 
-        # Fallback: if CSS selector fails due to Spotify layout change,
-        # try aria-rowindex rows
-        if not tracks:
-            print("Primary selector failed, trying fallback...")
-            rows = driver.find_elements(By.XPATH, '//div[@aria-rowindex]')
-            for row in rows[:5]:
-                try:
-                    all_text = row.text.split("\n")
-                    name = all_text[0].strip() if all_text else None
-                    play_count = None
-                    for part in all_text:
-                        clean = part.replace(",", "").replace(".", "").replace(" ", "")
-                        if clean.isdigit() and 10_000 < int(clean) < 10_000_000_000:
-                            play_count = int(clean)
-                    if name and play_count:
-                        tracks.append({"name": name, "count": play_count})
-                except Exception:
-                    continue
-
+    except Exception as e:
+        print(f"Driver error: {e}")
     finally:
         driver.quit()
 
@@ -125,16 +153,8 @@ def send_to_discord(tracks, prev_data):
             "inline": False
         })
 
-    fields.append({
-        "name": "🕐 Checked At",
-        "value": now,
-        "inline": True
-    })
-    fields.append({
-        "name": "📊 Previous Check",
-        "value": prev_run,
-        "inline": True
-    })
+    fields.append({"name": "🕐 Checked At", "value": now, "inline": True})
+    fields.append({"name": "📊 Previous Check", "value": prev_run, "inline": True})
 
     payload = {
         "embeds": [{
@@ -145,9 +165,21 @@ def send_to_discord(tracks, prev_data):
             "footer": {"text": "Updates every 3 hours via GitHub Actions"}
         }]
     }
-
     r = requests.post(DISCORD_WEBHOOK, json=payload)
     print(f"Discord status: {r.status_code}")
+
+
+def send_error_to_discord(message):
+    """Send an alert to Discord if scraping fails, so you know immediately."""
+    payload = {
+        "embeds": [{
+            "title": "⚠️ Spotify Tracker Error",
+            "description": message,
+            "color": 15158332,  # Red
+            "footer": {"text": datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC")}
+        }]
+    }
+    requests.post(DISCORD_WEBHOOK, json=payload)
 
 
 # ─── MAIN ────────────────────────────────────────────────────
@@ -158,16 +190,14 @@ if __name__ == "__main__":
     tracks = get_top_tracks()
 
     if tracks:
-        print(f"Found {len(tracks)} tracks:")
-        for t in tracks:
-            print(f"  {t['name']}: {t['count']:,}")
-
+        print(f"\nSuccessfully found {len(tracks)} tracks.")
         send_to_discord(tracks, data)
-
-        # Save new counts
         data["last_run"] = datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC")
         data["tracks"] = {t["name"]: {"count": t["count"]} for t in tracks}
         save_data(data)
-        print("Done! Data saved.")
+        print("Data saved. ✅")
     else:
-        print("❌ No tracks found. Spotify may have changed its layout.")
+        msg = "Could not extract any tracks from the Spotify artist page. The page layout may have changed — check GitHub Actions logs."
+        print(f"❌ {msg}")
+        send_error_to_discord(msg)   # You'll get a red alert in Discord
+        exit(1)
