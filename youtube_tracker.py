@@ -13,6 +13,16 @@ VIDEO_IDS = [
     "Iy_qH9EvuJY"
 ]
 
+VN_TZ = timedelta(hours=7)
+
+def format_time():
+    utc = datetime.utcnow()
+    vn  = utc + VN_TZ
+    return f"{utc.strftime('%H:%M UTC')} ({vn.strftime('%H:%M ICT, %b %d')})"
+
+def today_utc():
+    return datetime.utcnow().strftime("%Y-%m-%d")
+
 
 # ─── DATA HELPERS ────────────────────────────────────────────
 
@@ -28,17 +38,9 @@ def save_data(data):
         json.dump(data, f, indent=2)
 
 
-def today_utc():
-    return datetime.utcnow().strftime("%Y-%m-%d")
-
-
 # ─── YOUTUBE API FETCH ───────────────────────────────────────
 
 def fetch_video_stats(video_ids):
-    """
-    Fetch title, viewCount, likeCount, commentCount for all video IDs
-    in a single API call (quota-efficient).
-    """
     youtube = build("youtube", "v3", developerKey=YOUTUBE_API_KEY)
     response = youtube.videos().list(
         part="snippet,statistics",
@@ -48,22 +50,17 @@ def fetch_video_stats(video_ids):
     videos = []
     for item in response.get("items", []):
         vid_id = item["id"]
-        title = item["snippet"]["title"]
-        stats = item.get("statistics", {})
+        title  = item["snippet"]["title"]
+        stats  = item.get("statistics", {})
         views    = int(stats.get("viewCount", 0))
         likes    = int(stats.get("likeCount", 0))
         comments = int(stats.get("commentCount", 0))
         url = f"https://www.youtube.com/watch?v={vid_id}"
         videos.append({
-            "id": vid_id,
-            "title": title,
-            "url": url,
-            "views": views,
-            "likes": likes,
-            "comments": comments
+            "id": vid_id, "title": title, "url": url,
+            "views": views, "likes": likes, "comments": comments
         })
 
-    # Sort by views descending (rank #1 = most viewed)
     videos.sort(key=lambda x: x["views"], reverse=True)
     return videos
 
@@ -71,7 +68,6 @@ def fetch_video_stats(video_ids):
 # ─── RATE & DAILY HELPERS ────────────────────────────────────
 
 def calc_rate(vid_id, current_val, key, prev_videos):
-    """Plays/hour for any metric based on real elapsed time since last change."""
     prev = prev_videos.get(vid_id, {})
     prev_val = prev.get(key, 0)
     prev_changed_at = prev.get(f"{key}_changed_at")
@@ -87,12 +83,11 @@ def calc_rate(vid_id, current_val, key, prev_videos):
 
 
 def get_daily(vid_id, current_val, key, prev_videos):
-    """Returns gain since UTC midnight for any metric."""
     prev = prev_videos.get(vid_id, {})
-    day_key = f"{key}_day_start"
+    day_key  = f"{key}_day_start"
     date_key = f"{key}_day_date"
     if prev.get(date_key) != today_utc():
-        return None  # Will be initialized on save
+        return None
     start_val = prev.get(day_key)
     if start_val is None:
         return None
@@ -102,8 +97,8 @@ def get_daily(vid_id, current_val, key, prev_videos):
 def has_any_change(videos, prev_videos):
     for v in videos:
         prev = prev_videos.get(v["id"], {})
-        if (prev.get("views", 0) != v["views"] or
-            prev.get("likes", 0) != v["likes"] or
+        if (prev.get("views", 0)    != v["views"] or
+            prev.get("likes", 0)    != v["likes"] or
             prev.get("comments", 0) != v["comments"]):
             return True
     return False
@@ -115,27 +110,22 @@ def build_updated_videos(videos, prev_videos, now_iso):
     updated = {}
     for v in videos:
         vid_id = v["id"]
-        prev = prev_videos.get(vid_id, {})
-
-        entry = {
+        prev   = prev_videos.get(vid_id, {})
+        entry  = {
             "title":    v["title"],
             "views":    v["views"],
             "likes":    v["likes"],
             "comments": v["comments"],
         }
-
-        # Per-metric change tracking
         for key in ["views", "likes", "comments"]:
-            curr_val = v[key]
-            prev_val = prev.get(key, 0)
+            curr_val    = v[key]
+            prev_val    = prev.get(key, 0)
             changed_key = f"{key}_changed_at"
             day_key     = f"{key}_day_start"
             date_key    = f"{key}_day_date"
 
-            # last_changed_at
             entry[changed_key] = now_iso if curr_val != prev_val else prev.get(changed_key, now_iso)
 
-            # Daily reset
             if prev.get(date_key) != today_utc():
                 entry[day_key]  = prev_val if prev_val else curr_val
                 entry[date_key] = today_utc()
@@ -152,12 +142,10 @@ def build_updated_videos(videos, prev_videos, now_iso):
 def medal(rank):
     return ["🥇", "🥈", "🥉"][rank - 1] if rank <= 3 else f"#{rank}"
 
-
 def fmt_diff(diff):
     if diff is None or diff == 0:
         return "no change"
     return f"+{diff:,}" if diff > 0 else f"{diff:,}"
-
 
 def fmt_rate(rate):
     if rate is None:
@@ -167,43 +155,42 @@ def fmt_rate(rate):
 
 def send_to_discord(videos, prev_data):
     prev_videos = prev_data.get("videos", {})
-    now_str = datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC")
+    now_str  = format_time()                        # ← UTC + ICT
     prev_run = prev_data.get("last_run", "Never")
 
     fields = []
     for i, v in enumerate(videos, 1):
         vid_id   = v["id"]
-        title    = v["title"]
         views    = v["views"]
         likes    = v["likes"]
         comments = v["comments"]
-        prev = prev_videos.get(vid_id, {})
+        prev     = prev_videos.get(vid_id, {})
 
-        # Since last check
         d_views    = views    - prev.get("views", 0)
         d_likes    = likes    - prev.get("likes", 0)
         d_comments = comments - prev.get("comments", 0)
 
-        # Daily totals
         dv_today = get_daily(vid_id, views,    "views",    prev_videos)
         dl_today = get_daily(vid_id, likes,    "likes",    prev_videos)
         dc_today = get_daily(vid_id, comments, "comments", prev_videos)
 
-        # Hourly rates
-        rate_v = calc_rate(vid_id, views,    "views",    prev_videos)
-        rate_l = calc_rate(vid_id, likes,    "likes",    prev_videos)
+        rate_v = calc_rate(vid_id, views, "views", prev_videos)
+        rate_l = calc_rate(vid_id, likes, "likes", prev_videos)
 
-        daily_str = ""
-        if dv_today is not None:
+        if dv_today is None:
+            daily_str = "\n   📅 **Today (ICT):** calculating..."
+        elif dv_today == 0:
+            daily_str = "\n   📅 **Today (ICT):** no new views yet"
+        else:
             daily_str = (
-                f"\n   📅 **Today:** "
+                f"\n   📅 **Today (ICT):** "
                 f"👁 +{dv_today:,}  "
                 f"👍 +{dl_today:,}  "
                 f"💬 +{dc_today:,}"
-            ) if dv_today > 0 else "\n   📅 **Today:** no plays yet"
+            )
 
         fields.append({
-            "name": f"{medal(i)} #{i} — {title}",
+            "name": f"{medal(i)} #{i} — {v['title']}",
             "value": (
                 f"👁 **{views:,}** views  ({fmt_diff(d_views)})\n"
                 f"👍 **{likes:,}** likes  ({fmt_diff(d_likes)})\n"
@@ -215,33 +202,27 @@ def send_to_discord(videos, prev_data):
             "inline": False
         })
 
-    # Gap table between ranks
+    # Gaps between ranks
     gap_lines = []
     for i in range(1, len(videos)):
         gap = videos[i-1]["views"] - videos[i]["views"]
-        gap_lines.append(
-            f"  • #{i} → #{i+1}: **{gap:,}** views apart"
-        )
+        gap_lines.append(f"  • #{i} → #{i+1}: **{gap:,}** views apart")
 
-    fields.append({
-        "name": "─────────────────────",
-        "value": "** **",
-        "inline": False
-    })
+    fields.append({"name": "─────────────────────", "value": "** **", "inline": False})
     fields.append({
         "name": "↕️ View Gaps Between Ranks",
         "value": "\n".join(gap_lines),
         "inline": False
     })
-    fields.append({"name": "🕐 Updated At",  "value": now_str,  "inline": True})
-    fields.append({"name": "📋 Prev Check",  "value": prev_run, "inline": True})
+    fields.append({"name": "🕐 Updated At", "value": now_str,  "inline": True})   # ← shows both times
+    fields.append({"name": "📋 Prev Check", "value": prev_run, "inline": True})
 
     payload = {
         "embeds": [{
             "title": "🎬 YouTube Video Tracker — Ranked by Views",
-            "color": 16711680,   # YouTube red #FF0000
+            "color": 16711680,
             "fields": fields,
-            "footer": {"text": "Only posts when stats change • Daily totals reset at UTC midnight"}
+            "footer": {"text": "Only posts when stats change • Daily resets at 00:00 UTC (07:00 ICT)"}
         }]
     }
     r = requests.post(DISCORD_WEBHOOK, json=payload)
@@ -254,7 +235,7 @@ def send_error_to_discord(message):
             "title": "⚠️ YouTube Tracker Error",
             "description": message,
             "color": 15158332,
-            "footer": {"text": datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC")}
+            "footer": {"text": format_time()}    # ← UTC + ICT
         }]
     }
     requests.post(DISCORD_WEBHOOK, json=payload)
@@ -266,7 +247,7 @@ if __name__ == "__main__":
     now_iso = datetime.utcnow().isoformat()
     print(f"[{now_iso}] Starting YouTube tracker...")
 
-    data = load_data()
+    data        = load_data()
     prev_videos = data.get("videos", {})
 
     try:
@@ -286,7 +267,7 @@ if __name__ == "__main__":
         print("✅ Changes detected — sending to Discord...")
         send_to_discord(videos, data)
 
-    data["last_run"] = datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC")
-    data["videos"] = build_updated_videos(videos, prev_videos, now_iso)
+    data["last_run"] = format_time()               # ← UTC + ICT saved to JSON too
+    data["videos"]   = build_updated_videos(videos, prev_videos, now_iso)
     save_data(data)
     print("Data saved. ✅")
