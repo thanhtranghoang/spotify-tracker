@@ -2,3 +2,4 @@ selenium
 webdriver-manager
 requests
 discord-webhook
+google-api-python-client
