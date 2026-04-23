@@ -1,4 +1,35 @@
 {
-  "last_run": "Never",
-  "videos": {}
+  "last_run": "09:42 UTC (16:42 ICT, Apr 23)",
+  "videos": {
+    "pIWH3cHu6Ms": {
+      "title": "CHUY\u1ec6N \u0110\u00d4I TA - C\u01b0\u1eddng B\u1ea1ch, Th\u1ebf V\u0129, H\u1eefu S\u01a1n, Minh Hi\u1ebfu, Ho\u00e0ng Long, \u0110\u1ee9c Duy, L\u00e2m Anh",
+      "views": 1851785,
+      "likes": 14637,
+      "comments": 1663,
+      "views_changed_at": "2026-04-23T09:42:45.692515",
+      "views_day_start": 1851785,
+      "views_day_date": "2026-04-23",
+      "likes_changed_at": "2026-04-23T09:42:45.692515",
+      "likes_day_start": 14637,
+      "likes_day_date": "2026-04-23",
+      "comments_changed_at": "2026-04-23T09:42:45.692515",
+      "comments_day_start": 1663,
+      "comments_day_date": "2026-04-23"
+    },
+    "aXowvLRLkfM": {
+      "title": "KH\u00d3C C\u00d9NG EM - PH\u00daC NGUY\u00caN, LONG HO\u00c0NG, \u0110\u1ee8C DUY| Ti\u1ebft M\u1ee5c Vocal C\u00f4ng Di\u1ec5n 3| T\u00c2N BINH TO\u00c0N N\u0102NG 2025",
+      "views": 1822693,
+      "likes": 14681,
+      "comments": 4476,
+      "views_changed_at": "2026-04-23T09:42:45.692515",
+      "views_day_start": 1822693,
+      "views_day_date": "2026-04-23",
+      "likes_changed_at": "2026-04-23T09:42:45.692515",
+      "likes_day_start": 14681,
+      "likes_day_date": "2026-04-23",
+      "comments_changed_at": "2026-04-23T09:42:45.692515",
+      "comments_day_start": 4476,
+      "comments_day_date": "2026-04-23"
+    }
+  }
 }
