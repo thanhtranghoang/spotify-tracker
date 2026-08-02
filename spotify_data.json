@@ -1,5 +1,5 @@
 {
-  "last_run": "03:19 UTC (10:19 ICT, Aug 02)",
+  "last_run": "08:28 UTC (15:28 ICT, Aug 02)",
   "tracks": {
     "B\u1eacN T\u00c2M (feat. LAVM)": {
       "count": 1366975,
@@ -19,16 +19,16 @@
       "day_start_count": 1279024,
       "day_start_date": "2026-08-02"
     },
-    "\u00daM BA LA (feat. DYLAN, O.D, LAVM, PN, LEON, WONBI, Th\u00e1i L\u00ea Minh Hi\u1ebfu, BEX, SWAN & H\u1ed3 \u0110\u00f4ng Quan)": {
-      "count": 834693,
-      "last_changed_at": "2026-08-01T19:13:23.564018",
-      "day_start_count": 834693,
-      "day_start_date": "2026-08-02"
-    },
     "KH\u00d3C C\u00d9NG EM (feat. LEON, O.D & PN)": {
       "count": 1098752,
       "last_changed_at": "2026-08-01T19:13:23.564018",
       "day_start_count": 1098752,
+      "day_start_date": "2026-08-02"
+    },
+    "\u00daM BA LA (feat. DYLAN, O.D, LAVM, PN, LEON, WONBI, Th\u00e1i L\u00ea Minh Hi\u1ebfu, BEX, SWAN & H\u1ed3 \u0110\u00f4ng Quan)": {
+      "count": 834693,
+      "last_changed_at": "2026-08-01T19:13:23.564018",
+      "day_start_count": 834693,
       "day_start_date": "2026-08-02"
     }
   }
