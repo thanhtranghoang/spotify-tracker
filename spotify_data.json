@@ -1,35 +1,35 @@
 {
-  "last_run": "21:04 UTC (04:04 ICT, Oct 13)",
+  "last_run": "06:07 UTC (13:07 ICT, Oct 13)",
   "tracks": {
     "B\u1eacN T\u00c2M (feat. LAVM)": {
       "count": 1547557,
       "last_changed_at": "2026-10-12T21:04:30.137496",
-      "day_start_count": 1545776,
-      "day_start_date": "2026-10-12"
+      "day_start_count": 1547557,
+      "day_start_date": "2026-10-13"
     },
     "1% (feat. PN)": {
       "count": 823794,
       "last_changed_at": "2026-10-12T21:04:30.137496",
-      "day_start_count": 823038,
-      "day_start_date": "2026-10-12"
+      "day_start_count": 823794,
+      "day_start_date": "2026-10-13"
     },
     "CHUY\u1ec6N \u0110\u00d4I TA (feat. Th\u00e1i L\u00ea Minh Hi\u1ebfu, BEX, LAVM, LEON, LEZII, SWAN & O.D)": {
       "count": 1348396,
       "last_changed_at": "2026-10-12T21:04:30.137496",
-      "day_start_count": 1347499,
-      "day_start_date": "2026-10-12"
+      "day_start_count": 1348396,
+      "day_start_date": "2026-10-13"
     },
     "KH\u00d3C C\u00d9NG EM (feat. LEON, O.D & PN)": {
       "count": 1160124,
       "last_changed_at": "2026-10-12T21:04:30.137496",
-      "day_start_count": 1159216,
-      "day_start_date": "2026-10-12"
+      "day_start_count": 1160124,
+      "day_start_date": "2026-10-13"
     },
     "\u00daM BA LA (feat. DYLAN, O.D, LAVM, PN, LEON, WONBI, Th\u00e1i L\u00ea Minh Hi\u1ebfu, BEX, SWAN & H\u1ed3 \u0110\u00f4ng Quan)": {
       "count": 889568,
       "last_changed_at": "2026-10-12T21:04:30.137496",
-      "day_start_count": 888889,
-      "day_start_date": "2026-10-12"
+      "day_start_count": 889568,
+      "day_start_date": "2026-10-13"
     }
   }
 }
