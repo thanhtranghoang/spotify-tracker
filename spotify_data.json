@@ -1,35 +1,35 @@
 {
-  "last_run": "19:32 UTC (02:32 ICT, Nov 05)",
+  "last_run": "01:22 UTC (08:22 ICT, Nov 05)",
   "tracks": {
     "B\u1eacN T\u00c2M (feat. LAVM)": {
-      "count": 1584082,
-      "last_changed_at": "2026-11-04T01:06:42.365813",
-      "day_start_count": 1582322,
-      "day_start_date": "2026-11-04"
+      "count": 1585558,
+      "last_changed_at": "2026-11-05T01:22:14.529001",
+      "day_start_count": 1584082,
+      "day_start_date": "2026-11-05"
     },
     "CHUY\u1ec6N \u0110\u00d4I TA (feat. Th\u00e1i L\u00ea Minh Hi\u1ebfu, BEX, LAVM, LEON, LEZII, SWAN & O.D)": {
-      "count": 1366310,
-      "last_changed_at": "2026-11-04T01:06:42.365813",
-      "day_start_count": 1365392,
-      "day_start_date": "2026-11-04"
+      "count": 1367050,
+      "last_changed_at": "2026-11-05T01:22:14.529001",
+      "day_start_count": 1366310,
+      "day_start_date": "2026-11-05"
     },
     "1% (feat. PN)": {
-      "count": 838613,
-      "last_changed_at": "2026-11-04T01:06:42.365813",
-      "day_start_count": 837916,
-      "day_start_date": "2026-11-04"
+      "count": 839338,
+      "last_changed_at": "2026-11-05T01:22:14.529001",
+      "day_start_count": 838613,
+      "day_start_date": "2026-11-05"
     },
     "KH\u00d3C C\u00d9NG EM (feat. LEON, O.D & PN)": {
-      "count": 1174482,
-      "last_changed_at": "2026-11-04T01:06:42.365813",
-      "day_start_count": 1173860,
-      "day_start_date": "2026-11-04"
+      "count": 1175099,
+      "last_changed_at": "2026-11-05T01:22:14.529001",
+      "day_start_count": 1174482,
+      "day_start_date": "2026-11-05"
     },
     "\u00daM BA LA (feat. DYLAN, O.D, LAVM, PN, LEON, WONBI, Th\u00e1i L\u00ea Minh Hi\u1ebfu, BEX, SWAN & H\u1ed3 \u0110\u00f4ng Quan)": {
-      "count": 903932,
-      "last_changed_at": "2026-11-04T01:06:42.365813",
-      "day_start_count": 903223,
-      "day_start_date": "2026-11-04"
+      "count": 904551,
+      "last_changed_at": "2026-11-05T01:22:14.529001",
+      "day_start_count": 903932,
+      "day_start_date": "2026-11-05"
     }
   }
 }
